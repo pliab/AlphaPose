@@ -278,6 +278,39 @@ def PCK_match(pick_pred, all_preds, ref_dist):
 
     return num_match_keypoints
 
+def format_json(frame, frameSize=(1,1), outputSize=(1,1), pretiffy=False):
+    json_results = []
+    json_results_cmu = []
+
+    for human in frame:
+        keypoints = []
+        result = {}
+
+        kp_preds = human['keypoints']
+        kp_scores = human['kp_score']
+        pro_scores = human['proposal_score']
+        for n in range(kp_scores.shape[0]):
+            keypoints.append(float(kp_preds[n, 0]) / frameSize[0])
+            keypoints.append(float(kp_preds[n, 1]) / frameSize[1])
+            keypoints.append(float(kp_scores[n]))
+        result['keypoints'] = keypoints
+        result['score'] = float(pro_scores)
+
+        # Convert to openpose format
+        tmp={'pose_keypoints_2d':[]}
+        result['keypoints'].append((result['keypoints'][15]+result['keypoints'][18])/2)
+        result['keypoints'].append((result['keypoints'][16]+result['keypoints'][19])/2)
+        result['keypoints'].append((result['keypoints'][17]+result['keypoints'][20])/2)
+        indexarr=[0,51,18,24,30,15,21,27,36,42,48,33,39,45,6,3,12,9]
+
+        for i in indexarr:
+            tmp['pose_keypoints_2d'].append(result['keypoints'][i]*outputSize[0])
+            tmp['pose_keypoints_2d'].append(result['keypoints'][i+1]*outputSize[1])
+            tmp['pose_keypoints_2d'].append(result['keypoints'][i+2])
+        json_results_cmu.append(tmp)
+
+    return json.dumps({'humans': json_results_cmu}, indent=4, sort_keys=pretiffy)
+
 
 def write_json(all_results, outputpath, for_eval=False):
     '''
@@ -360,4 +393,3 @@ def write_json(all_results, outputpath, for_eval=False):
     else:
         with open(os.path.join(outputpath,'alphapose-results.json'), 'w') as json_file:
             json_file.write(json.dumps(json_results))
-

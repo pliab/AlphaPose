@@ -33,7 +33,6 @@ if opt.vis_fast:
 else:
     from fn import vis_frame
 
-
 class WebcamLoader:
     def __init__(self, webcam, batchSize=1, queueSize=256):
         # initialize the file video stream along with the boolean
@@ -72,7 +71,7 @@ class WebcamLoader:
                         return
                     inp_dim = int(opt.inp_dim)
                     img_k, orig_img_k, im_dim_list_k = prep_frame(frame, inp_dim)
-                
+
                     img.append(img_k)
                     orig_img.append(orig_img_k)
                     im_name.append(str(i)+'.jpg')
@@ -108,13 +107,15 @@ class WebcamLoader:
         # indicate that the thread should be stopped
         self.stopped = True
 
-
 class DetectionLoader:
     def __init__(self, dataloder, batchSize=1, queueSize=1024):
         # initialize the file video stream along with the boolean
         # used to indicate if the thread should be stopped or not
-        self.det_model = Darknet("yolo/cfg/yolov3.cfg")
-        self.det_model.load_weights('models/yolo/yolov3.weights')
+        det_model_path = os.path.join(opt.root_path, 'yolo/cfg/yolov3.cfg')
+        weights_path = os.path.join(opt.root_path, 'models/yolo/yolov3.weights')
+
+        self.det_model = Darknet(det_model_path)
+        self.det_model.load_weights(weights_path)
         self.det_model.net_info['height'] = opt.inp_dim
         self.det_inp_dim = int(self.det_model.net_info['height'])
         assert self.det_inp_dim % 32 == 0
@@ -163,7 +164,7 @@ class DetectionLoader:
                 dets[:, [1, 3]] -= (self.det_inp_dim - scaling_factor * im_dim_list[:, 0].view(-1, 1)) / 2
                 dets[:, [2, 4]] -= (self.det_inp_dim - scaling_factor * im_dim_list[:, 1].view(-1, 1)) / 2
 
-                
+
                 dets[:, 1:5] /= scaling_factor
                 for j in range(dets.shape[0]):
                     dets[j, [1, 3]] = torch.clamp(dets[j, [1, 3]], 0.0, im_dim_list[j, 0])
@@ -193,7 +194,6 @@ class DetectionLoader:
         # return queue len
         return self.Q.qsize()
 
-
 class DetectionProcessor:
     def __init__(self, detectionLoader, queueSize=1024):
         # initialize the file video stream along with the boolean
@@ -214,7 +214,7 @@ class DetectionProcessor:
     def update(self):
         # keep looping the whole dataset
         while True:
-            
+
             with torch.no_grad():
                 (orig_img, im_name, boxes, scores, inps, pt1, pt2) = self.detectionLoader.read()
                 with self.detectionLoader.Q.mutex:
@@ -244,8 +244,11 @@ class WebcamDetectionLoader:
     def __init__(self, webcam = 0, batchSize=1, queueSize=256):
         # initialize the file video stream along with the boolean
         # used to indicate if the thread should be stopped or not
-        self.det_model = Darknet("yolo/cfg/yolov3.cfg")
-        self.det_model.load_weights('models/yolo/yolov3.weights')
+        det_model_path = os.path.join(opt.root_path, 'yolo/cfg/yolov3.cfg')
+        weights_path = os.path.join(opt.root_path, 'models/yolo/yolov3.weights')
+
+        self.det_model = Darknet(det_model_path)
+        self.det_model.load_weights(weights_path)
         self.det_model.net_info['height'] = opt.inp_dim
         self.det_inp_dim = int(self.det_model.net_info['height'])
         assert self.det_inp_dim % 32 == 0
@@ -354,7 +357,68 @@ class WebcamDetectionLoader:
         # indicate that the thread should be stopped
         self.stopped = True
 
+class DataViz:
+    def __init__(self, window_title='AlphaPose', queueSize=1024):
+        self.stopped = False
+        self.window_title = window_title
+        # initialize the queue used to store frames read from
+        # the video file
+        self.Q = Queue(maxsize=queueSize)
 
+    def start(self):
+        # start a thread to display images stream
+        t = Thread(target=self.update, args=())
+        t.daemon = True
+        t.start()
+        return self
+
+    def update(self):
+        # keep looping infinitely
+        while True:
+            # otherwise, ensure the queue is not empty
+            if not self.Q.empty():
+                (boxes, scores, hm_data, pt1, pt2, orig_img, im_name) = self.Q.get()
+                orig_img = np.array(orig_img, dtype=np.uint8)
+                if boxes is None:
+                    if opt.vis:
+                        img = orig_img
+                        cv2.imshow(self.window_title, img)
+                        cv2.waitKey(30)
+                else:
+                    preds_hm, preds_img, preds_scores = getPrediction(
+                        hm_data, pt1, pt2, opt.inputResH, opt.inputResW, opt.outputResH, opt.outputResW)
+
+                    result = pose_nms(boxes, scores, preds_img, preds_scores)
+                    result = {
+                        'imgname': im_name,
+                        'result': result
+                    }
+                    if opt.vis:
+                        img = vis_frame(orig_img, result)
+                        cv2.imshow(self.window_title, img)
+                        cv2.waitKey(30)
+            else:
+                time.sleep(0.1)
+
+    def running(self):
+        # indicate that the thread is still running
+        time.sleep(0.2)
+        return not self.Q.empty()
+
+    def save(self, boxes, scores, hm_data, pt1, pt2, orig_img, im_name):
+        # save next frame in the queue
+        self.Q.put((boxes, scores, hm_data, pt1, pt2, orig_img, im_name))
+
+    def parse(self, boxes, scores, hm_data, pt1, pt2):
+        preds_hm, preds_img, preds_scores = getPrediction(
+            hm_data, pt1, pt2, opt.inputResH, opt.inputResW, opt.outputResH, opt.outputResW)
+        result = pose_nms(boxes, scores, preds_img, preds_scores)
+        return result
+
+    def stop(self):
+        # indicate that the thread should be stopped
+        self.stopped = True
+        time.sleep(0.2)
 
 class DataWriter:
     def __init__(self, save_video=False,
@@ -407,7 +471,7 @@ class DataWriter:
                             self.stream.write(img)
                 else:
                     # location prediction (n, kp, 2) | score prediction (n, kp, 1)
-                    
+
                     preds_hm, preds_img, preds_scores = getPrediction(
                         hm_data, pt1, pt2, opt.inputResH, opt.inputResW, opt.outputResH, opt.outputResW)
 
@@ -417,6 +481,7 @@ class DataWriter:
                         'result': result
                     }
                     self.final_result.append(result)
+                    print(opt.vis, opt.vis_fast)
                     if opt.save_img or opt.save_video or opt.vis:
                         img = vis_frame(orig_img, result)
                         if opt.vis:
@@ -437,6 +502,12 @@ class DataWriter:
     def save(self, boxes, scores, hm_data, pt1, pt2, orig_img, im_name):
         # save next frame in the queue
         self.Q.put((boxes, scores, hm_data, pt1, pt2, orig_img, im_name))
+
+    def parse(self, boxes, scores, hm_data, pt1, pt2):
+        preds_hm, preds_img, preds_scores = getPrediction(
+            hm_data, pt1, pt2, opt.inputResH, opt.inputResW, opt.outputResH, opt.outputResW)
+        result = pose_nms(boxes, scores, preds_img, preds_scores)
+        return result
 
     def stop(self):
         # indicate that the thread should be stopped
