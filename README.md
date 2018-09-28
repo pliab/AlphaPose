@@ -50,15 +50,15 @@ python3 webcam_demo.py --webcam 0 --outdir examples/res --vis
 ```
 - **Websocket / Browser**:  Run AlphaPose using a webcam and stream the result trough a websocket:
 
-  1. First, start the detection server
+ 1. First, start the detection server
 ```bash
 python3 websocket_demo.py
 ```
-  2. Then, start a webserver
+ 2. Then, start a webserver
 ```shell
 python -m http.server
 ```
-  3. Finally open [localhost:8000](http://localhost:8000) and have fun :dancer:
+ 3. Finally open [localhost:8000](http://localhost:8000) and have fun :dancer:
 
 - **Input list**:  Run AlphaPose for images in a list and save the rendered images with:
 ```
