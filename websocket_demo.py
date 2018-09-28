@@ -1,11 +1,3 @@
-
-import signal
-import time
-from datetime import timedelta
-import websockets
-import asyncio
-import threading
-
 import torch
 from torch.autograd import Variable
 import torch.nn.functional as F
@@ -16,7 +8,7 @@ import torch.utils.data
 import numpy as np
 from opt import opt
 
-from dataloader_webcam import DetectionLoader, DetectionProcessor, DataViz, crop_from_dets, Mscoco
+from dataloader_webcam import WebcamLoader, DetectionLoader, DetectionProcessor, DataViz, crop_from_dets, Mscoco
 from yolo.darknet import Darknet
 from yolo.util import write_results, dynamic_write_results
 from SPPE.src.main_fast_inference import *
@@ -27,7 +19,11 @@ import time
 from fn import getTime
 import cv2
 
-from dataloader_webcam import WebcamLoader
+import signal
+from datetime import timedelta
+import asyncio
+import threading
+import websockets
 
 from pPose_nms import format_json
 
